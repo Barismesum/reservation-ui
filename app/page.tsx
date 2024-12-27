@@ -1,101 +1,167 @@
-import Image from "next/image";
+"use client"
+import React, { useState } from 'react';
+import AirplaneSeatMap from './components/AirplaneSeatMap';
+import PassengerForm from './components/PassengerForm';
+import InactivityWarning from './components/InactivityWarning';
+import { usePersistedState } from './hooks/usePersistedState';
+import { useInactivityWarning } from './hooks/useInactivityWarning';
+import { useToast } from './hooks/useToast';
+import type { PassengerFormData } from './types/passenger';
+import Toast from './components/Toast';
 
-export default function Home() {
+const emptyFormData: PassengerFormData = {
+  firstName: '',
+  lastName: '',
+  phone: '',
+  email: '',
+  gender: '',
+  birthDate: ''
+};
+
+function App() {
+  const [selectedSeats, setSelectedSeats] = usePersistedState<string[]>('selectedSeats', []);
+  const [openPassenger, setOpenPassenger] = usePersistedState<number>('openPassenger', 1);
+  const { showWarning, handleContinue, startMonitoring } = useInactivityWarning();
+  const { isVisible, message, showToast, hideToast } = useToast();
+  
+  const [passengerForms, setPassengerForms] = useState<Record<string, PassengerFormData>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, Record<string, string>>>({});
+
+  const handleSeatSelect = (seatId: string) => {
+    setSelectedSeats(prev => {
+      const newSeats = prev.includes(seatId)
+        ? prev.filter(id => id !== seatId)
+        : prev.length < 3 ? [...prev, seatId] : prev;
+      
+      if (newSeats.length > 0) {
+        startMonitoring();
+      }
+      
+      return newSeats;
+    });
+  };
+
+  const validateForm = (data: PassengerFormData) => {
+    const errors: Record<string, string> = {};
+    
+    if (!data.firstName?.trim()) errors.firstName = 'İsim alanı zorunludur';
+    if (!data.lastName?.trim()) errors.lastName = 'Soyisim alanı zorunludur';
+    if (!data.phone?.trim()) {
+      errors.phone = 'Telefon alanı zorunludur';
+    } else if (!/^[0-9]{10}$/.test(data.phone.replace(/\D/g, ''))) {
+      errors.phone = 'Geçerli bir telefon numarası giriniz';
+    }
+    if (!data.email?.trim()) {
+      errors.email = 'E-posta alanı zorunludur';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
+      errors.email = 'Geçerli bir e-posta adresi giriniz';
+    }
+    if (!data.gender) errors.gender = 'Cinsiyet seçimi zorunludur';
+    if (!data.birthDate) errors.birthDate = 'Doğum tarihi zorunludur';
+    
+    return errors;
+  };
+
+  const handleFormChange = (seatId: string, data: PassengerFormData) => {
+    setPassengerForms(prev => ({
+      ...prev,
+      [seatId]: data
+    }));
+  };
+
+  const handleCompleteReservation = () => {
+    const allErrors: Record<string, Record<string, string>> = {};
+    let hasErrors = false;
+
+    selectedSeats.forEach(seatId => {
+      const formData = passengerForms[seatId] || emptyFormData;
+      const errors = validateForm(formData);
+      
+      if (Object.keys(errors).length > 0) {
+        hasErrors = true;
+        allErrors[seatId] = errors;
+      }
+    });
+
+    setFormErrors(allErrors);
+
+    if (hasErrors) {
+      showToast('Lütfen tüm alanları doğru şekilde doldurunuz.');
+      return;
+    }
+
+    showToast('Rezervasyon işleminiz başarıyla tamamlanmıştır!');
+    setTimeout(() => {
+      setSelectedSeats([]);
+      setPassengerForms({});
+      setFormErrors({});
+    }, 2000);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <>
+      {showWarning && <InactivityWarning onContinue={handleContinue} />}
+      {isVisible && <Toast message={message} onClose={hideToast} />}
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="grid md:grid-cols-2 gap-8">
+              <div>
+                <h2 className="text-xl font-semibold mb-6">Koltuk Seçimi</h2>
+                <AirplaneSeatMap
+                  selectedSeats={selectedSeats}
+                  onSeatSelect={handleSeatSelect}
+                />
+              </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+              <div>
+                <h2 className="text-xl font-semibold mb-6">Yolcu Bilgileri</h2>
+                {selectedSeats.length > 0 ? (
+                  selectedSeats.map((seat, index) => (
+                    <PassengerForm
+                      key={seat}
+                      passengerNumber={index + 1}
+                      seatNumber={seat}
+                      isOpen={openPassenger === index + 1}
+                      onToggle={() => setOpenPassenger(index + 1)}
+                      onChange={(data) => handleFormChange(seat, data)}
+                      formData={passengerForms[seat] || emptyFormData}
+                      errors={formErrors[seat] || {}}
+                    />
+                  ))
+                ) : (
+                  <div className="text-gray-500 text-center py-8 bg-gray-50 rounded-lg">
+                    Lütfen koltuk seçimi yapınız
+                  </div>
+                )}
+                
+                {selectedSeats.length > 0 && (
+                  <div className="mt-6">
+                    <div className="flex justify-between items-center bg-gray-100 p-4 rounded-lg">
+                      <div>
+                        <span className="text-sm text-gray-600">
+                          {selectedSeats.length} koltuk x 1,000 TL
+                        </span>
+                        <p className="text-xl font-bold">
+                          {selectedSeats.length * 1000} TL
+                        </p>
+                      </div>
+                      <button
+                        className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                        onClick={handleCompleteReservation}
+                      >
+                        İşlemleri Tamamla
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+    </>
   );
 }
+
+export default App;
